@@ -4,6 +4,7 @@ const {BookingRepository}=require('../repositories');
 const db=require('../models');
 const AppError = require('../utils/errors/app-error');
 const { StatusCodes } = require('http-status-codes');
+const redis=require('../config/redis-config');
 
 const ENUMS=require('../utils/common/enum');
 const {BOOKED,CANCELLED,PENDING,INITIATED}=ENUMS.BOOKING_STATUS;
