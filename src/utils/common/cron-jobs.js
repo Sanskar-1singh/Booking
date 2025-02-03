@@ -2,7 +2,7 @@ const cron=require('node-cron');
 const {BookingService}=require('../../services');
 const redis = require('../../config/redis-config');
  function scheduleCrons(){
-    cron.schedule('*/1 * * * *',async ()=>{
+    cron.schedule('*/15 * * * *',async ()=>{
            const response=await BookingService.cancelOldBookings();
             console.log("hello from CRON",response);
             await redis.flushdb(); 
