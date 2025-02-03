@@ -5,13 +5,14 @@ const db=require('../models');
 const AppError = require('../utils/errors/app-error');
 const { StatusCodes } = require('http-status-codes');
 
+const ENUMS=require('../utils/common/enum');
+const {BOOKED,CANCELLED,PENDING,INITIATED}=ENUMS.BOOKING_STATUS;
+
 const bookingRepository=new BookingRepository();
 
 async function createBooking(data){
     const transaction=await db.sequelize.transaction();
     try {
-        console.log(data);
-        console.log(data.flightId);
         const flight=await axios.get(`${ServerConfig.FLIGHT_SERVICE}/api/v1/flights/${data.flightId}`);
         const flightData=flight.data.data;//why????
         if(data.noOfSeats>flightData.totalSeats){
@@ -30,13 +31,45 @@ async function createBooking(data){
          })
           
          await transaction.commit();
-        return true;
+        return booking;
     } catch (error) {
         await transaction.rollback();
         throw error;
     }
 
 }
+
+async function makePayment(data){
+    const transaction=await db.sequelize.transaction();
+    try {
+        const bookingDetails=await bookingRepository.get(data.bookingId,transaction);
+        if(bookingDetails.status==CANCELLED){
+            throw new AppError('Booking has already expired',StatusCodes.BAD_REQUEST);
+        }
+        const bookingTime=new Date( bookingDetails.createdAt);
+        const currentTime=new Date();
+        if(currentTime-bookingTime>300000){
+            await bookingRepository.update(data.bookingId,{status:'CANCELLED'},transaction);
+            throw new AppError('Booking has expired',StatusCodes.BAD_REQUEST);
+        }
+        if(bookingDetails.totalCost!=data.totalCost){
+            throw new AppError('Billing amount did not match',StatusCodes.BAD_REQUEST);
+        }
+        //if while fetching data from repository fails then it will directly throw error>>
+        if(bookingDetails.userId!=data.userId){
+            throw new AppError('userId did not match',StatusCodes.BAD_REQUEST);   
+        }
+       //we assume that payment is successfull>>>
+        const response=await bookingRepository.update(data.bookingId,{status:BOOKED},transaction);
+        await transaction.commit();
+        console.log("from service",response);
+        return response;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
 module.exports={
-    createBooking
+    createBooking,
+    makePayment
 }
