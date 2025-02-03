@@ -49,7 +49,7 @@ async function makePayment(data){
         const bookingTime=new Date( bookingDetails.createdAt);
         const currentTime=new Date();
         if(currentTime-bookingTime>300000){
-            await bookingRepository.update(data.bookingId,{status:'CANCELLED'},transaction);
+            await cancelBooking(data.bookingId);
             throw new AppError('Booking has expired',StatusCodes.BAD_REQUEST);
         }
         if(bookingDetails.totalCost!=data.totalCost){
@@ -69,7 +69,29 @@ async function makePayment(data){
         throw error;
     }
 }
+//doubt in>> how we are binding transaction together and how they are working as together wholesome>>
+
+async function cancelBooking(bookingId){
+    const transaction=await db.sequelize.transaction();
+    try {
+        const bookingDetails=await bookingRepository.get(bookingId,transaction);
+        if(bookingDetails.status==CANCELLED){
+            await transaction.commit();
+            return true;
+        }
+        await axios.patch(`${ServerConfig.FLIGHT_SERVICE}/api/v1/flights/${bookingDetails.flightId}/seats`,{
+            seats:bookingDetails.noOfSeats,
+            dec:0
+         });
+         await bookingRepository.update(bookingId,{status:'CANCELLED'},transaction);
+         await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
 module.exports={
     createBooking,
-    makePayment
+    makePayment,
+    cancelBooking
 }
