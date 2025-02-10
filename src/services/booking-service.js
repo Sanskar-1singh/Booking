@@ -1,10 +1,10 @@
 const axios=require('axios');
-const {ServerConfig}=require('../config/index');
+const {ServerConfig,Queue}=require('../config/index');
 const {BookingRepository}=require('../repositories');
 const db=require('../models');
 const AppError = require('../utils/errors/app-error');
 const { StatusCodes } = require('http-status-codes');
-const redis=require('../config/redis-config');
+
 
 const ENUMS=require('../utils/common/enum');
 const {BOOKED,CANCELLED,PENDING,INITIATED}=ENUMS.BOOKING_STATUS;
@@ -19,7 +19,7 @@ async function createBooking(data){
         if(data.noOfSeats>flightData.totalSeats){
              throw new AppError('Not enough seats available',StatusCodes.BAD_REQUEST);
         }
-        
+        console.log('total seat',data.noOfSeats)
         const totalBillingAmount=data.noOfSeats*flightData.price;
          console.log(totalBillingAmount);
 
@@ -30,7 +30,7 @@ async function createBooking(data){
          await axios.patch(`${ServerConfig.FLIGHT_SERVICE}/api/v1/flights/${data.flightId}/seats`,{
             seats:data.noOfSeats
          })
-          
+      
          await transaction.commit();
         return booking;
     } catch (error) {
@@ -49,7 +49,7 @@ async function makePayment(data){
         }
         const bookingTime=new Date( bookingDetails.createdAt);
         const currentTime=new Date();
-        if(currentTime-bookingTime>300000){
+        if(currentTime-bookingTime>300000 && bookingDetails.status!='booked'){
             await cancelBooking(data.bookingId);
             throw new AppError('Booking has expired',StatusCodes.BAD_REQUEST);
         }
@@ -62,8 +62,16 @@ async function makePayment(data){
         }
        //we assume that payment is successfull>>>
         const response=await bookingRepository.update(data.bookingId,{status:BOOKED},transaction);
+        await Queue.sendData({
+            recepientEmail:'sanskarsingh812@gmail.com',
+            subject:'Flight booked',
+            text:`booking successfully done for flight for booking id ${data.bookingId}`
+        });
+      
         await transaction.commit();
+
         console.log("from service",response);
+     
         return response;
     } catch (error) {
         await transaction.rollback();

@@ -26,3 +26,4 @@ module.exports={
 }
 
 //idk sanskar-03:05-8448
+//$ winpty docker run --name redis-server -it redis:latest
